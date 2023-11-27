@@ -9,9 +9,14 @@ class BaseOptions():
         self.initialized = False
 
     def initialize(self):
+        ####################
         self.parser.add_argument('--dataroot', required=True, help='path to images (should have subfolders trainA, trainB, valA, valB, etc)')
+        self.parser.add_argument('--inp_seq', required=True, help='Name of input sequence')
+        self.parser.add_argument('--out_seq', required=True, help='Name of output sequence')
+        self.parser.add_argument('--quality', required=True, help='Image quality')
+        ####################
         self.parser.add_argument('--batchSize', type=int, default=6, help='input batch size')
-        self.parser.add_argument('--loadSize', type=int, default=128, help='scale images to this size')
+        self.parser.add_argument('--loadSize', type=int, default=256, help='scale images to this size')
         self.parser.add_argument('--fineSize', type=int, default=128, help='then crop to this size')
         self.parser.add_argument('--input_nc', type=int, default=1, help='# of input image channels')
         self.parser.add_argument('--output_nc', type=int, default=1, help='# of output image channels')

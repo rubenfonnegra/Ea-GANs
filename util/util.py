@@ -12,9 +12,10 @@ import scipy.io as sio
 # Converts a Tensor into a Numpy array
 # |imtype|: the desired type of the converted numpy array
 def tensor2im(image_tensor, imtype=np.uint8):
-    image_numpy = image_tensor.cpu().float().numpy()[0,0,30:33,:,:]
-    # image_numpy = (np.transpose(image_numpy, (1, 2, 0)) + 1) / 2.0 * 255.0
+    image_numpy = image_tensor.cpu().float().numpy()[0] #[0,0,30:33,:,:]
+    # # image_numpy = (np.transpose(image_numpy, (1, 2, 0)) + 1) / 2.0 * 255.0
     image_numpy = (image_numpy + 1) / 2.0 * 255.0
+    image_numpy = np.squeeze(image_numpy)
     return image_numpy.astype(imtype)
 
 def tensor2array(image_tensor):
@@ -45,7 +46,7 @@ def diagnose_network(net, name='network'):
 
 def save_image(image_numpy, image_path):
 
-    savImg = sitk.GetImageFromArray(image_numpy[:,:,:])
+    savImg = sitk.GetImageFromArray(image_numpy)
     sitk.WriteImage(savImg, image_path)
     # savImg = sitk.GetImageFromArray(image_numpy[1,:,:,:])
     # sitk.WriteImage(image_path, eachPath +'/' + fn +'_2n_fake.nii.gz')

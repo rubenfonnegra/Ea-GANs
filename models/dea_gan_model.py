@@ -167,10 +167,10 @@ class dea_ganModel(BaseModel):
         self.optimizer_G.step()
 
     def get_current_errors(self):
-        return OrderedDict([('G_GAN', self.loss_G_GAN.data[0]),
-                        ('G_L1', self.loss_G_L1.data[0]),
-                        ('G_sobelL1', self.loss_sobelL1.data[0]),
-                        ('D_GAN', self.loss_D.data[0])
+        return OrderedDict([('G_GAN', self.loss_G_GAN.item()), #.data[0]
+                        ('G_L1', self.loss_G_L1.item()),
+                        ('G_sobelL1', self.loss_sobelL1.item()),
+                        ('D_GAN', self.loss_D.item())
                         ])
 
 

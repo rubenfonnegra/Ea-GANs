@@ -31,9 +31,9 @@ def weights_init(m):
 
 def get_norm_layer(norm_type):
     if norm_type == 'batch':
-        norm_layer = nn.BatchNorm3d
+        norm_layer = nn.BatchNorm2d
     elif norm_type == 'instance':
-        norm_layer = nn.InstanceNorm3d
+        norm_layer = nn.InstanceNorm2d
     else:
         print('normalization layer [%s] is not found' % norm)
     return norm_layer
@@ -208,46 +208,75 @@ class GANLoss_smooth(nn.Module):
 
 
 
-def create3DsobelFilter():
-    num_1, num_2, num_3 = np.zeros((3,3))
-    num_1 = [[1., 2., 1.],
-             [2., 4., 2.],
-             [1., 2., 1.]]
-    num_2 = [[0., 0., 0.],
-             [0., 0., 0.],
-             [0., 0., 0.]]
-    num_3 = [[-1., -2., -1.],
-             [-2., -4., -2.],
-             [-1., -2., -1.]]
-    sobelFilter = np.zeros((3,1,3,3,3))
+# def create3DsobelFilter():
+#     num_1, num_2, num_3 = np.zeros((3,3))
+#     num_1 = [[1., 2., 1.],
+#              [2., 4., 2.],
+#              [1., 2., 1.]]
+#     num_2 = [[0., 0., 0.],
+#              [0., 0., 0.],
+#              [0., 0., 0.]]
+#     num_3 = [[-1., -2., -1.],
+#              [-2., -4., -2.],
+#              [-1., -2., -1.]]
+#     sobelFilter = np.zeros((3,1,3,3,3))
 
-    sobelFilter[0,0,0,:,:] = num_1
-    sobelFilter[0,0,1,:,:] = num_2
-    sobelFilter[0,0,2,:,:] = num_3
-    sobelFilter[1,0,:,0,:] = num_1
-    sobelFilter[1,0,:,1,:] = num_2
-    sobelFilter[1,0,:,2,:] = num_3
-    sobelFilter[2,0,:,:,0] = num_1
-    sobelFilter[2,0,:,:,1] = num_2
-    sobelFilter[2,0,:,:,2] = num_3
+#     sobelFilter[0,0,0,:,:] = num_1
+#     sobelFilter[0,0,1,:,:] = num_2
+#     sobelFilter[0,0,2,:,:] = num_3
+#     sobelFilter[1,0,:,0,:] = num_1
+#     sobelFilter[1,0,:,1,:] = num_2
+#     sobelFilter[1,0,:,2,:] = num_3
+#     sobelFilter[2,0,:,:,0] = num_1
+#     sobelFilter[2,0,:,:,1] = num_2
+#     sobelFilter[2,0,:,:,2] = num_3
+
+#     return Variable(torch.from_numpy(sobelFilter).type(torch.cuda.FloatTensor))
+
+
+# def sobelLayer(input):
+#     pad = nn.ConstantPad3d((1,1,1,1,1,1),-1)
+#     kernel = create3DsobelFilter()
+#     act = nn.Tanh()
+#     paded = pad(input)
+#     fake_sobel = F.conv3d(paded, kernel, padding = 0, groups = 1)/4
+#     n,c,h,w,l = fake_sobel.size()
+#     fake = torch.norm(fake_sobel,2,1,True)/c*3
+#     fake_out = act(fake)*2-1
+
+#     return fake_out
+
+def create3DsobelFilter():
+    #num_1, num_2, num_3 = np.zeros((3,3))
+    num_1 = [[1., 2., 1.],
+             [0., 0., 0.],
+             [-1., -2., -1.]]
+    num_2 = [[1., 0., -1.],
+             [2., 0., -2.],
+             [1., 0., -1.]]
+
+    sobelFilter = np.zeros((2,1,3,3))
+
+    sobelFilter[0,0,:,:] = num_1
+    sobelFilter[1,0,:,:] = num_2
 
     return Variable(torch.from_numpy(sobelFilter).type(torch.cuda.FloatTensor))
 
-
-
-
-
 def sobelLayer(input):
-    pad = nn.ConstantPad3d((1,1,1,1,1,1),-1)
+    #
+    # Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
+    pad = nn.ConstantPad2d((1,1,1,1),-1)
     kernel = create3DsobelFilter()
     act = nn.Tanh()
     paded = pad(input)
-    fake_sobel = F.conv3d(paded, kernel, padding = 0, groups = 1)/4
-    n,c,h,w,l = fake_sobel.size()
+    paded = paded.type(torch.cuda.FloatTensor)
+    fake_sobel = F.conv2d(paded, kernel, padding = 0, groups = 1)/4
+    n,c,h,w = fake_sobel.size()
     fake = torch.norm(fake_sobel,2,1,True)/c*3
     fake_out = act(fake)*2-1
 
-    return fake_out
+    return fake
+
 
 
 
@@ -258,7 +287,7 @@ def sobelLayer(input):
 # at the bottleneck
 class UnetGenerator(nn.Module):
     def __init__(self, input_nc, output_nc, num_downs, ngf=64,
-                 norm_layer=nn.BatchNorm3d, use_dropout=False, gpu_ids=[]):
+                 norm_layer=nn.BatchNorm2d, use_dropout=False, gpu_ids=[]):
         super(UnetGenerator, self).__init__()
         self.gpu_ids = gpu_ids
 
@@ -292,14 +321,15 @@ class UnetGenerator(nn.Module):
 #   |-- downsampling -- |submodule| -- upsampling --|
 class UnetSkipConnectionBlock(nn.Module):
     def __init__(self, outer_nc, inner_nc, input_nc=None,
-                 submodule=None, outermost=False, innermost=False, norm_layer=nn.BatchNorm3d, use_dropout=False):
+                 submodule=None, outermost=False, innermost=False, norm_layer=nn.BatchNorm2d, use_dropout=False):
         super(UnetSkipConnectionBlock, self).__init__()
         self.outermost = outermost
+        kernel_size=4
 
         if input_nc is None:
             input_nc = outer_nc
 
-        downconv = nn.Conv3d(input_nc, inner_nc, kernel_size=4,
+        downconv = nn.Conv2d(input_nc, inner_nc, kernel_size=kernel_size,
                              stride=2, padding=1)
         downrelu = nn.LeakyReLU(0.2, True)
         downnorm = norm_layer(inner_nc, affine=True, track_running_stats=True)
@@ -307,23 +337,26 @@ class UnetSkipConnectionBlock(nn.Module):
         upnorm = norm_layer(outer_nc, affine=True, track_running_stats=True)
 
         if outermost:
-            upconv = nn.ConvTranspose3d(inner_nc * 2, outer_nc,
-                                        kernel_size=4, stride=2,
-                                        padding=1)
+            upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
+                                        kernel_size=kernel_size, 
+                                        stride=2, #=(2, 1, 1), #=2,
+                                        padding=1) #=(0, 1, 1)) #1)
             down = [downconv]
             up = [uprelu, upconv, nn.Tanh()]
             model = down + [submodule] + up
         elif innermost:
-            upconv = nn.ConvTranspose3d(inner_nc, outer_nc,
-                                        kernel_size=4, stride=2,
-                                        padding=1)
+            upconv = nn.ConvTranspose2d(inner_nc, outer_nc,
+                                        kernel_size=kernel_size, 
+                                        stride=2, #=1 #=(2, 1, 1), #=2,
+                                        padding=1) #=1 #=(0, 1, 1)) #1)
             down = [downrelu, downconv]
             up = [uprelu, upconv, upnorm]
             model = down + up
         else:
-            upconv = nn.ConvTranspose3d(inner_nc * 2, outer_nc,
-                                        kernel_size=4, stride=2,
-                                        padding=1)
+            upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
+                                        kernel_size=kernel_size, 
+                                        stride=2, #=(2, 1, 1), #=2,
+                                        padding=1) #=(0, 1, 1)) #1)
             down = [downrelu, downconv, downnorm]
             up = [uprelu, upconv, upnorm]
 
@@ -348,13 +381,13 @@ class UnetSkipConnectionBlock(nn.Module):
 
 # Defines the PatchGAN discriminator with the specified arguments.
 class NLayerDiscriminator(nn.Module):
-    def __init__(self, input_nc, ndf=64, n_layers=3, norm_layer=nn.BatchNorm3d, use_sigmoid=False, gpu_ids=[]):
+    def __init__(self, input_nc, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d, use_sigmoid=False, gpu_ids=[]):
         super(NLayerDiscriminator, self).__init__()
         self.gpu_ids = gpu_ids
 
         kw = 4
         padw = int(np.ceil((kw-1)/2))
-        input_conv = nn.Conv3d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw)
+        input_conv = nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw)
         sequence = [
             input_conv,
             nn.LeakyReLU(0.2, True)
@@ -365,7 +398,7 @@ class NLayerDiscriminator(nn.Module):
         for n in range(1, n_layers):
             nf_mult_prev = nf_mult
             nf_mult = min(2**n, 8)
-            intermediate_conv = nn.Conv3d(ndf * nf_mult_prev, ndf * nf_mult,
+            intermediate_conv = nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult,
                                 kernel_size=kw, stride=2, padding=padw)
             sequence += [
                 intermediate_conv,
@@ -376,7 +409,7 @@ class NLayerDiscriminator(nn.Module):
 
         nf_mult_prev = nf_mult
         nf_mult = min(2**n_layers, 8)
-        intermediate_conv2 = nn.Conv3d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=1, padding=padw)
+        intermediate_conv2 = nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=1, padding=padw)
         sequence += [
             intermediate_conv2,
             # TODO: useInstanceNorm
@@ -384,7 +417,7 @@ class NLayerDiscriminator(nn.Module):
             nn.LeakyReLU(0.2, True)
         ]
 
-        last_conv = nn.Conv3d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw)
+        last_conv = nn.Conv2d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw)
 
         sequence += [last_conv]
 
