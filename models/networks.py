@@ -35,7 +35,7 @@ def get_norm_layer(norm_type):
     elif norm_type == 'instance':
         norm_layer = nn.InstanceNorm2d
     else:
-        print('normalization layer [%s] is not found' % norm)
+        print('normalization layer [%s] is not found' % norm_type)
     return norm_layer
 
 
