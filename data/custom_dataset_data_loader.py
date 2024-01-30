@@ -26,7 +26,7 @@ class CustomDatasetDataLoader(BaseDataLoader):
         self.dataloader = torch.utils.data.DataLoader(
             self.dataset,
             batch_size=opt.batchSize,
-            shuffle=not opt.serial_batches,
+            shuffle= False, #not opt.serial_batches,
             num_workers=int(opt.nThreads))
 
     def load_data(self):

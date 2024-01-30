@@ -342,7 +342,7 @@ class UnetSkipConnectionBlock(nn.Module):
                                         stride=2, #=(2, 1, 1), #=2,
                                         padding=1) #=(0, 1, 1)) #1)
             down = [downconv]
-            up = [uprelu, upconv, nn.Tanh()]
+            up = [uprelu, upconv] #, nn.Tanh()
             model = down + [submodule] + up
         elif innermost:
             upconv = nn.ConvTranspose2d(inner_nc, outer_nc,

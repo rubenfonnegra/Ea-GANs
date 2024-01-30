@@ -1,6 +1,7 @@
 import os.path
 import random
 import torchvision.transforms as T
+from torchvision.utils import _log_api_usage_once
 import torch
 from data.base_dataset import BaseDataset
 from data.image_folder import make_dataset
@@ -54,6 +55,84 @@ class min_max_scaling (torch.nn.Module):
                                             \n\t(out_range min={self.out_range.min()}, out_range max={self.out_range.max()}))"
 
 
+##
+## Custom standarization transform
+## 
+class z_score (torch.nn.Module):
+    """Standarize a tensor image given a pair [mean, std].
+    It differs from the standard torchvision.Normalize as you can give both
+    mean and std during the forward pass.
+    This transform does not support PIL Image.
+    Given: ``mean, std`` this transform will scale each input
+    ``torch.*Tensor`` i.e.,
+    ``output = (input - mean)/std``
+    """
+    
+    def __init__(self):
+        super().__init__()
+    
+    def forward(self, tensor: torch.Tensor, mean = None, std = None) -> torch.Tensor:
+        """
+        Args:
+            tensor (Tensor): Tensor image to be standarized.
+            mean (float): mean value to s
+            andarize.
+            std  (float): std value to standarize.
+        Returns:
+            Tensor: Standarized Tensor image.
+        """
+        mean = torch.mean(tensor) if mean == None else mean
+        std  = torch.std(tensor) if std == None else std 
+        return (tensor - mean) / std
+        
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}( \n\t( None )\n\t )"
+
+##
+## Custom compose for custom transforms
+## 
+class Custom_Compose:
+    """Composes several transforms together. This transform does not support torchscript.
+    Please, see the note below.
+    
+    Args:
+        transforms (list of ``Transform`` objects): list of transforms to compose.
+        
+        Make sure to use only scriptable transformations, i.e. that work with ``torch.Tensor``, does not require
+        `lambda` functions or ``PIL.Image``.
+    """
+    
+    def __init__(self, trans):
+        if not torch.jit.is_scripting() and not torch.jit.is_tracing():
+            _log_api_usage_once(self)
+        self.transforms = trans
+        self.transforms_methods = self.getMethods(T.transforms)
+    
+    def __call__(self, img, *kwargs):
+        for t in self.transforms:
+            if f"{t}"[:f"{t}".find("(")] in self.transforms_methods:
+                img = t(img)
+            else: 
+                img = t(img, *kwargs)
+        return img
+    
+    def __repr__(self) -> str:
+        format_string = self.__class__.__name__ + "("
+        for t in self.transforms:
+            format_string += "\n"
+            format_string += f"    {t}"
+        format_string += "\n)"
+        return format_string
+    
+    def getMethods(self, clss):
+        import types
+        result = [ ]
+        for var in clss.__dict__:
+            val = clss.__dict__[var]
+            result.append(var)
+        return sorted(result)
+
+
 class AlignedDataset(BaseDataset):   ## train
     def initialize(self, opt):
         self.opt = opt
@@ -69,19 +148,29 @@ class AlignedDataset(BaseDataset):   ## train
         
         self.A_paths = data[opt.inp_seq].tolist()
         self.B_paths = data[opt.out_seq].tolist()
+        self.means_ = data['mean_'].tolist()
+        self.stds_ = data['std_'].tolist()
 
         assert(opt.resize_or_crop == 'resize_and_crop')
 
-        # self.transform = torch.from_numpy
-        self.transform = T.Compose([T.Resize([opt.loadSize, opt.loadSize]), 
-                                    T.ToTensor(), 
-                                    min_max_scaling(out_range = [-1,1])])
+        # # self.transform = torch.from_numpy
+        # self.transform = T.Compose([T.Resize([opt.loadSize, opt.loadSize]), 
+        #                             T.ToTensor(), 
+        #                             min_max_scaling(out_range = [-1,1])])
+        
+        
+        self.transform = Custom_Compose([T.Resize([opt.loadSize, opt.loadSize]), 
+                                         T.ToTensor(),
+                                         z_score()])
         self.eps = 10**(-12)
 
     def __getitem__(self, index):
 
         A_path = self.A_paths[index]
         B_path = self.B_paths[index]
+        means_ = self.means_[index]
+        stds_  = self.stds_[index]
+        
         # img0 = io.imread(A_path, plugin = 'simpleitk')
         A = Image.open(self.root + A_path).convert("F") #.convert('RGB')
         B = Image.open(self.root + B_path).convert("F") #.convert('RGB')
@@ -105,8 +194,8 @@ class AlignedDataset(BaseDataset):   ## train
         # A = AB[0,0:nchannels,:,:]#[None, :]
         # B = AB[0,nchannels:nchannels*2,:,:]#[None, :]
         
-        A = self.transform(A)
-        B = self.transform(B)
+        A = self.transform(A, means_, stds_)
+        B = self.transform(B, means_, stds_)
 
         if (not self.opt.no_flip) and random.random() < 0.5:
             idx = [i for i in range(A.size(2) - 1, -1, -1)]
